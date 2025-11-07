@@ -59,35 +59,31 @@
 #
 #
 
-# =============================================================================
+# 5) BioFindr output: G
+
+# 5-element Vector{SimpleEdge{Int64}}:
+# Edge 12 => 87
+# Edge 12 => 203
+# Edge 45 => 107
+# Edge 107 => 311
+# Edge 203 => 311
+
+# 6) BioFindr output:  name2idx 
+# "geneA" => 12
+# "geneB" => 87
+# "geneC" => 203
+# "geneD" => 45
+# "geneE" => 311
+# "geneF" => 107
 
 import Pkg
 Pkg.activate("/cluster/projects/nn1015k/GRN-TWAS/")
 
 using CSV, DataFrames, BioFindr
+using JLD2
+using Graphs
 
 
-"""
-    infer_grn(dX, dG, dE; colX=2, colG=1, combination="orig", method="moments", FDR=1.0, sorted=true)
-
-Run BioFindr causal inference with an eQTL-mapped IV design.
-
-Arguments
-  dX::DataFrame  # N×G expression (columns are gene IDs, rows are samples)
-  dG::DataFrame  # N×S genotype (columns are SNP IDs, rows are samples; same order as dX)
-  dE::DataFrame  # eQTL pairs with at least columns :SNP and :gene
-
-Keyword arguments
-  colX::Union{Int,Symbol}=2   # which column in dE contains the gene IDs
-  colG::Union{Int,Symbol}=1   # which column in dE contains the SNP IDs
-  combination::String="orig"  # ("orig" | "IV" | "mediation")
-  method::String="moments"    # ("moments" | "kde")
-  FDR::Real=1.0               # q-value threshold (no filtering if 1.0)
-  sorted::Bool=true
-
-Returns
-  DataFrame with inferred edges: [:Source, :Target, :Probability, :qvalue]
-"""
 function infer_grn(dX::DataFrame, dG::DataFrame, dE::DataFrame;
                    colX::Union{Int,Symbol}=2,
                    colG::Union{Int,Symbol}=1,
@@ -107,6 +103,8 @@ function infer_grn(dX::DataFrame, dG::DataFrame, dE::DataFrame;
 
     BioFindr.globalfdr!(dP, FDR=0.15, sorted=true)
     G, name2idx = dagfindr!(dP)
+    save_path = joinpath(GRAPH_DIR, "grn.jld2")
+    JLD2.@save save_path dP G name2idx
 
     return G,name2idx
 
