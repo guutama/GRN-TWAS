@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GRN-TWAS • README</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#475569; --bg:#ffffff; --accent:#2563eb;
+    --code-bg:#0b1020; --code-fg:#e5e7eb; --kbd-bg:#f1f5f9; --border:#e2e8f0;
+    --good:#16a34a; --warn:#f59e0b; --bad:#dc2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";}
+  header{padding:2.5rem 1rem 1rem;border-bottom:1px solid var(--border)}
+  main{max-width:1000px;margin:0 auto;padding:1.25rem}
+  h1{margin:.2rem 0;font-size:2rem}
+  h2{margin-top:2rem;font-size:1.45rem}
+  h3{margin-top:1.25rem;font-size:1.1rem}
+  p,li{color:var(--muted)}
+  a{color:var(--accent);text-decoration:none}
+  .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:.2rem .6rem;margin:.15rem .15rem 0 0;background:#f8fafc;color:#0b1228;font-size:.8rem}
+  code,kbd,pre{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:1rem;border:1px solid #0b1228;border-radius:12px;overflow:auto}
+  code{background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:.15rem .35rem}
+  kbd{background:var(--kbd-bg);border:1px solid var(--border);border-radius:6px;padding:.15rem .35rem}
+  .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .card{border:1px solid var(--border);border-radius:12px;background:#fff;padding:1rem}
+  table{width:100%;border-collapse:collapse;margin:.75rem 0 1.25rem}
+  th,td{border-bottom:1px solid var(--border);text-align:left;padding:.5rem .4rem;vertical-align:top}
+  .small{font-size:.92rem}
+  .ok{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  footer{border-top:1px solid var(--border);padding:1rem;margin-top:2rem;color:var(--muted)}
+  .path{font-family:ui-monospace, Consolas, monospace}
+  .indent{padding-left:1rem;border-left:3px solid var(--border)}
+</style>
+</head>
+<body>
+
+<header>
+  <main>
+    <h1>GRN-TWAS • Gene Regulatory Network-Driven Transcriptome-Wide Association Studies</h1>
+    <p class="small">A framework that integrates tissue-specific gene regulatory networks (GRNs) into TWAS to capture both local (cis) and distal (trans) regulation and improve gene–disease discovery.</p>
+    <span class="pill">Julia ≥ 1.9</span>
+    <span class="pill">MLJ / BioFindr</span>
+    <span class="pill">Single-tissue or multi-tissue</span>
+    <span class="pill">Reproducible CLI</span>
+  </main>
+</header>
+
+<main>
+
+  <h2 id="overview">1) Overview</h2>
+  <p>
+    <strong>GRN-TWAS</strong> reconstructs gene regulatory networks from a reference cohort (matched genotype + expression),
+    then trains per-gene expression models that incorporate <em>cis</em> and network-derived <em>trans</em> eQTLs.
+    Using GWAS summary statistics, it computes TWAS Z-scores/p-values, enabling discovery of CAD-relevant (or other trait) genes,
+    including those driven by distal regulation that cis-only approaches miss.
+  </p>
+
+  
+  <h2 id="data">2) Data inputs </h2>
+
+  <h3>2.1 Expression (CSV)</h3>
+  <p>Rows = genes; columns: <code>id</code> (gene symbol/ID) + per-sample expression (Float64). Provide <em>two files</em> for train/validation.</p>
+  <pre><code>id,sample1,sample2,sample3,sample4
+gene1,0.415,0.167,0.000,0.034
+gene2,0.614,0.000,0.506,0.852
+...</code></pre>
+
+  <h3>2.2 Genotype (CSV)</h3>
+  <p>Rows = SNPs; columns: <code>rs_id, chromosome, position, ref, alt</code> + per-sample 0/1/2 dosages. Provide train/validation.</p>
+  <pre><code>rs_id,chromosome,position,ref,alt,sample1,sample2,sample3,sample4
+rs1,6,4162,C,G,0,0,1,0
+rs2,16,9857,G,A,0,0,1,0
+...</code></pre>
+
+  <h3>2.3 eQTL maps (JSON)</h3>
+  <p>Two JSON files mapping <em>target gene → SNP list</em>. The <code>--trans</code> JSON should aggregate SNPs from upstream regulators (parents/grandparents) of each target in the GRN.</p>
+  <pre><code>{
+  "geneA": ["rs1","rs5"],
+  "geneB": ["rs3"]
+}</code></pre>
+
+  <h3>2.4 GWAS summary statistics (TSV/CSV)</h3>
+  <p>Must include <code>snpID</code>, alleles, and either <code>Z</code> or both <code>beta</code> and <code>standard_error</code>.</p>
+  <pre><code>snpID  effect_allele  other_allele  Z      beta    standard_error
+rs1    C              G             0.50
+rs2    G              A                     0.010   0.002
+...</code></pre>
+
+  <div class="card">
+    <strong>Sample alignment</strong>
+    <ul>
+      <li>Expression and genotype sample columns must refer to the same individuals in the same order (for both train and validation).</li>
+      <li>Gene IDs in expression must match GRN node names (<code>name2idx</code>) for modeled genes.</li>
+      <li>SNP IDs in eQTL JSONs must match genotype column names.</li>
+    </ul>
+  </div>
+
+  <h2 id="layout">3) Suggested repo layout</h2>
+  <pre><code class="path">project-root/
+├─ data/
+│  ├─ expr_train.csv
+│  ├─ expr_val.csv
+│  ├─ geno_train.csv
+│  ├─ geno_val.csv
+│  ├─ cis_eqtls.json
+│  ├─ trans_eqtls.json
+│  ├─ gwas.tsv
+│  └─ grn.jld2        # (optional; produced by structure_learning.jl)
+├─ outputs/
+│  └─ AOR/                # models, checkpoints, associations, plots
+├─ structure_learning.jl
+├─ gene_model_training.jl
+└─ association_test.jl</code></pre>
+
+  <h2 id="quickstart">4) Quick start</h2>
+  <div class="card">
+    <p><strong>Install deps</strong> inside your project environment:</p>
+    <pre><code>julia --project -e 'using Pkg; Pkg.instantiate()'</code></pre>
+    <p><strong>Enable threads</strong>:</p>
+    <pre><code>export JULIA_NUM_THREADS=auto</code></pre>
+  </div>
+
+  <h2 id="run">5) Running the pipeline (CLI)</h2>
+
+  <h3>5.1 Structure learning (GRN inference)</h3>
+  <p>Builds a directed GRN (DAG) and saves <code>(G, name2idx)</code> in JLD2. If you already have a DAG, you can skip this step.</p>
+  <pre><code>julia --project -t auto structure_learning.jl \
+  --expr data/AOR_expr_train.csv \
+  --geno data/AOR_geno_train.csv \
+  --eqtl data/AOR_cis_eqtls.json \
+  --fdr 0.15 \
+  --method moments \
+  --combination orig \
+  --out-dag data/grn.jld2</code></pre>
+
+  <table class="small">
+    <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--expr</code></td><td>Expression CSV (train)</td></tr>
+      <tr><td><code>--geno</code></td><td>Genotype CSV (train)</td></tr>
+      <tr><td><code>--eqtl</code></td><td>eQTL JSON (SNP→gene)</td></tr>
+      <tr><td><code>--fdr</code></td><td>Global FDR threshold (e.g., 0.15)</td></tr>
+      <tr><td><code>--method</code></td><td><code>moments</code> or <code>kde</code></td></tr>
+      <tr><td><code>--combination</code></td><td><code>orig</code> | <code>IV</code> | <code>mediation</code></td></tr>
+      <tr><td><code>--out-dag</code></td><td>Output JLD2 with <code>(G, name2idx)</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.2 Gene-model training (cis / trans / stacked)</h3>
+  <p>Trains per-gene models; saves checkpoints and a final per-gene JSON (<code>metrices_and_params_gp*.json</code>) under <code>--model-path</code>.</p>
+  <pre><code>julia --project -t auto gene_model_training.jl \
+  --dag data/grn.jld2 \
+  --expr-tr data/expr_train.csv \
+  --expr-val data/expr_val.csv \
+  --geno-tr data/geno_train.csv \
+  --geno-val data/geno_val.csv \
+  --cis data/cis_eqtls.json \
+  --trans data/trans_eqtls.json \
+  --model-path outputs/ \
+  --checkpoint-interval 200 \
+  --gene-range "all"</code></pre>
+
+  <table class="small">
+    <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--dag</code></td><td>JLD2 with <code>(G, name2idx)</code></td></tr>
+      <tr><td><code>--expr-tr</code> / <code>--expr-val</code></td><td>Expression CSV train/validation</td></tr>
+      <tr><td><code>--geno-tr</code> / <code>--geno-val</code></td><td>Genotype CSV train/validation</td></tr>
+      <tr><td><code>--cis</code></td><td>JSON: <code>gene → [cis SNPs]</code></td></tr>
+      <tr><td><code>--trans</code></td><td>JSON: <code>gene → [trans SNPs]</code> (parents/grandparents)</td></tr>
+      <tr><td><code>--model-path</code></td><td>Output folder for model JSON and logs</td></tr>
+      <tr><td><code>--checkpoint-interval</code></td><td>Checkpoint every N genes</td></tr>
+      <tr><td><code>--gene-range</code></td><td><code>"all"</code> or <code>"start:stop"</code> (1-based)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.3 Association testing (TWAS)</h3>
+  <p>Harmonizes alleles, computes TWAS Z/p, applies BH-FDR, and writes JSON + diagnostic plots.</p>
+  <pre><code>julia --project -t auto association_test.jl \
+  --models outputs/AOR/metrices_and_params.json \
+  --expr data/expr_train.csv \
+  --geno data/geno_train.csv \
+  --gwas data/gwas.tsv \
+  --out-dir outputs/</code></pre>
+
+  <table class="small">
+    <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--models</code></td><td>Per-gene JSON from training (metrics, params, mode, weights)</td></tr>
+      <tr><td><code>--expr</code></td><td>Expression CSV (same cohort as <code>--geno</code>)</td></tr>
+      <tr><td><code>--geno</code></td><td>Genotype CSV (used for σ terms & QC)</td></tr>
+      <tr><td><code>--gwas</code></td><td>GWAS with alleles + <code>Z</code> or (<code>beta</code>, <code>standard_error</code>)</td></tr>
+      <tr><td><code>--out-dir</code></td><td>Outputs: assoc JSON + PDFs</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Allele harmonization</h3>
+      <ul>
+        <li>Ambiguous A/T and C/G variants are dropped.</li>
+        <li>If effect/reference mismatch detected, flips GWAS Z (or β).</li>
+        <li>Computes Z from β/SE when Z is absent.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Stacked models</h3>
+      <ul>
+        <li>Fits cis on <code>y</code>, then trans on residuals.</li>
+        <li>Optimizes non-negative weights for cis/trans on validation to maximize R².</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="outputs">6) Outputs</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Structure learning</h3>
+      <ul>
+        <li><code>data/grn.jld2</code> → <code>(G, name2idx)</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Model training</h3>
+      <ul>
+        <li><code>outputs/metrices_and_params.json</code></li>
+        <li>Checkpoint files every N genes</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Association</h3>
+      <ul>
+        <li><code>outputs/association.json</code></li>
+    
+      </ul>
+    </div>
+  </div>
+
+  
+
+ 
+
+  <!---<h2 id="cite">9) Citation</h2>
+  <p>If you use this framework, please cite this repository and foundational tools you rely on (e.g., Findr/BioFindr, MLJ). If you prioritize CAD genes with VarElect in your study text, cite:</p>
+  <pre><code>Stelzer, G., et al. "VarElect: the phenotype-based variation prioritizer..." BMC Genomics (2016).</code></pre>
+-->
+</main>
+
+<!--<footer>
+  <main>
+    <span class="small">© GRN-TWAS. Built with BioFindr/Findr, MLJ, and friends. MIT or project license of your choice.</span>
+  </main>
+</footer> -->
+
+</body>
+</html>
