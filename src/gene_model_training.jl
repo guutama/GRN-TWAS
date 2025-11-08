@@ -235,27 +235,40 @@ function process_gene(gene_idx::Int,
     )
 end
 
-# ── Tissue-level driver ───────────────────────────────────────────────────────
-function process_tissue(tissue::String,
-                        dag_results::Dict{String,Tuple{Graphs.SimpleDiGraph,Dict{String,Int}}},
-                        expr_dict_train::Dict{String,DataFrame},
-                        expr_dict_val::Dict{String,DataFrame},
-                        geno_dict_train::Dict{String,DataFrame},
-                        geno_dict_val::Dict{String,DataFrame},
-                        cis_eqtl_dict::Dict{String,Dict{String,Vector{String}}},
-                        trans_eqtl_dict::Dict{String,Dict{String,Vector{String}}},
-                        save_lock::ReentrantLock;
-                        checkpoint_interval::Int=100,
-                        gene_range::Union{AbstractVector{Int},String}="all",
-                        model_path::AbstractString=".")
 
-    dag_data  = get(dag_results, tissue, missing)
-    expr_tr   = get(expr_dict_train, tissue, missing)
-    expr_val  = get(expr_dict_val,   tissue, missing)
-    geno_tr   = get(geno_dict_train, tissue, missing)
-    geno_val  = get(geno_dict_val,   tissue, missing)
-    cis_eqtls = get(cis_eqtl_dict,   tissue, missing)
-    trans_eqtls = get(trans_eqtl_dict, tissue, missing)
+
+function main(dag_data::Tuple{Graphs.SimpleDiGraph,Dict{String,Int}},
+                expr_tr::DataFrame,
+                expr_val::DataFrame,
+                geno_tr::DataFrame,
+                geno_val::DataFrame,
+                cis_eqtls::Dict{String,Vector{String}},
+                trans_eqtls::Dict{String,Vector{String}},
+                save_lock::ReentrantLock;
+                checkpoint_interval::Int=100,
+                gene_range::Union{AbstractVector{Int},String}="all",
+                model_path::AbstractString=".")
+
+
+
+
+# - dag_data = (G, name2idx)
+#     G::Graphs.SimpleDiGraph over genes; name2idx maps gene_name::String → Int index in G.
+#     Every gene name used in expression columns must appear in name2idx (and vice-versa).
+#
+# - expr_tr / expr_val (expression data,training/validation):
+#     Rows   = samples; Columns = :genes
+#     Size   = N_train × G and N_val × G, respectively.
+
+#
+# - geno_tr / geno_val (genotypes,training/validation   ):
+#     Rows   = samples; Columns = :snp
+#     Entries= 0/1/2 (Int);
+#     The :sample column must match expr_tr/expr_val exactly and be in the same order.
+#
+# - cis_eqtls / trans_eqtls:
+#     Dict{String,Vector{String}} mapping gene_name → vector of SNP ids (must match geno column names).
+#
 
     if dag_data === missing || expr_tr === missing || geno_tr === missing || cis_eqtls === missing
         @warn "Skipping $tissue: missing data"
@@ -298,48 +311,55 @@ function process_tissue(tissue::String,
 
     tissue_pairs = filter(!isnothing, gene_results_list)
     gene_dict = Dict(tissue_pairs)
-    return tissue => gene_dict
+    return  gene_dict
 end
 
-# ── Main (data-agnostic; caller passes all inputs) ────────────────────────────
-function main(tissue::String;
-              dag_results::Dict{String,Tuple{Graphs.SimpleDiGraph,Dict{String,Int}}},
-              exp_train_transposed::Dict{String,DataFrame},
-              exp_test_transposed::Dict{String,DataFrame},
-              geno_train_transposed::Dict{String,DataFrame},
-              geno_test_transposed::Dict{String,DataFrame},
-              cis_eqtl_dict::Dict{String,Dict{String,Vector{String}}},
-              trans_eqtl_dict::Dict{String,Dict{String,Vector{String}}},
-              model_path::AbstractString=".",
-              checkpoint_interval::Int=100)
 
-    result_tissue = process_tissue(
-        tissue,
-        dag_results,
-        exp_train_transposed,
-        exp_test_transposed,
-        geno_train_transposed,
-        geno_test_transposed,
-        cis_eqtl_dict,
-        trans_eqtl_dict,
-        ReentrantLock();
-        checkpoint_interval=checkpoint_interval,
-        gene_range="all",
-        model_path=model_path,
-    )
 
-    tissue_name, gene_dict = result_tissue
+
+# Before running the main function, ensure you have the required inputs:
+# ── Run Main  ────────────────────────────
+result_tissue = main(dag_data::Tuple{Graphs.SimpleDiGraph,Dict{String,Int}},
+                expr_tr::DataFrame,
+                expr_val::DataFrame,
+                geno_tr::DataFrame,
+                geno_val::DataFrame,
+                cis_eqtls::Dict{String,Vector{String}},
+                trans_eqtls::Dict{String,Vector{String}},
+                save_lock::ReentrantLock;
+                checkpoint_interval::Int=100,
+                gene_range::Union{AbstractVector{Int},String}="all",
+                model_path::AbstractString=".")
+
+  
+
+    gene_dict = result_tissue
     out_dict = Dict{String,Any}()
     for (gene, payload) in gene_dict
         out_dict[gene] = payload[:metrices_and_params]
     end
 
-    json_path = joinpath(model_path, "metrices_and_params_gp$(tissue_name).json")
+    json_path = joinpath(model_path, "metrices_and_params.json")
     mkpath(dirname(json_path))
     open(json_path, "w") do io
         JSON3.write(io, out_dict; indent=2)
     end
+    
 
     @info "Saved $(length(out_dict)) genes to $json_path"
-    return out_dict
-end
+ 
+
+    
+#=
+    julia --project -t auto run_main.jl \
+  --dag data/AOR_dag.jld2 \
+  --expr-tr data/AOR_expr_train.csv \
+  --expr-val data/AOR_expr_val.csv \
+  --geno-tr data/AOR_geno_train.csv \
+  --geno-val data/AOR_geno_val.csv \
+  --cis data/AOR_cis_eqtls.json \
+  --trans data/AOR_trans_eqtls.json \
+  --model-path outputs/AOR \
+  --checkpoint-interval 200 \
+  --gene-range "all"
+  =#
