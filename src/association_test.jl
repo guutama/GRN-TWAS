@@ -1,6 +1,6 @@
 # %%
 using Pkg: Pkg
-Pkg.activate("/cluster/projects/nn1015k/GRN-TWAS/")
+#Pkg.activate("/cluster/projects/nn1015k/GRN-TWAS/")
 
 
 # %%
